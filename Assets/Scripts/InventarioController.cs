@@ -8,165 +8,87 @@ public class InventarioController : MonoBehaviour
     public GameObject inventarioPanel;
     public List<GameObject> slots = new List<GameObject>();
     public GameObject emptyText;
-    public float slotSize = 80f;
-    public float spacing = 15f;
     
-    private bool inventarioAbierto = false;
     private List<ItemData> items = new List<ItemData>();
     private GameManager gameManager;
+    private ItemData itemPendiente;
+    private bool abierto;
+    private bool esperandoSlot;
     
-    // Item pendiente de guardar (recolección)
-    private ItemData itemPendiente = null;
-    private bool esperandoSeleccionSlot = false;
-
-    // Evento para notificar cambios
     public System.Action OnInventarioActualizado;
 
     void Start()
     {
         gameManager = FindObjectOfType<GameManager>();
+        inventarioPanel?.SetActive(false);
         
-        if (inventarioPanel != null)
-        {
-            inventarioPanel.SetActive(false);
-        }
+        for (int i = 0; i < slots.Count; i++)
+            items.Add(null);
         
-        // Inicializar slots vacíos
         for (int i = 0; i < slots.Count; i++)
         {
-            items.Add(null);
+            int idx = i;
+            slots[i]?.GetComponent<Button>()?.onClick.AddListener(() => OnSlotClick(idx));
         }
-        
-        // Conectar slots a eventos de clic
-        ConectarSlots();
-        
-        Debug.Log("✅ Inventario inicializado");
     }
 
     void Update()
     {
-        // Abrir/cerrar con tecla I
         if (Input.GetKeyDown(KeyCode.I))
         {
-            if (esperandoSeleccionSlot)
-            {
-                // Si está esperando selección, cancelar
-                CancelarRecoleccion();
-            }
-            else
-            {
-                ToggleInventario();
-            }
+            if (esperandoSlot) CancelarRecoleccion();
+            else ToggleInventario();
         }
         
-        // Cerrar con ESC (si no está esperando selección)
-        if (Input.GetKeyDown(KeyCode.Escape) && inventarioAbierto && !esperandoSeleccionSlot)
-        {
+        if (Input.GetKeyDown(KeyCode.Escape) && abierto && !esperandoSlot)
             CerrarInventario();
-        }
-    }
-
-    void ConectarSlots()
-    {
-        for (int i = 0; i < slots.Count; i++)
-        {
-            GameObject slot = slots[i];
-            if (slot == null) continue;
-            
-            Button btn = slot.GetComponent<Button>();
-            if (btn != null)
-            {
-                int index = i; // Capturar índice
-                btn.onClick.AddListener(() => OnSlotClick(index));
-            }
-        }
     }
 
     void OnSlotClick(int index)
     {
-        if (esperandoSeleccionSlot && itemPendiente != null)
+        if (esperandoSlot && itemPendiente != null)
         {
-            // Guardar item en el slot seleccionado
-            GuardarItemEnSlot(index, itemPendiente);
-            itemPendiente = null;
-            esperandoSeleccionSlot = false;
-            CerrarInventario();
-            Debug.Log($"✅ Item guardado en slot {index + 1}");
+            if (index < items.Count)
+            {
+                items[index] = itemPendiente;
+                itemPendiente = null;
+                esperandoSlot = false;
+                ActualizarUI();
+                CerrarInventario();
+                OnInventarioActualizado?.Invoke();
+            }
         }
         else
         {
-            // Si hay un item en el slot, mostrar opción de usarlo
             if (index < items.Count && items[index] != null)
-            {
-                Debug.Log($"🔍 Slot {index + 1}: {items[index].nombre}");
-                // Aquí puedes agregar acción de usar item (opcional)
-            }
+                Debug.Log("slot " + (index + 1) + ": " + items[index].nombre);
         }
     }
 
-    void GuardarItemEnSlot(int index, ItemData item)
-    {
-        if (index < 0 || index >= items.Count) return;
-        
-        // Reemplazar item si ya existe
-        if (items[index] != null)
-        {
-            Debug.Log($"🔄 Reemplazando '{items[index].nombre}' por '{item.nombre}' en slot {index + 1}");
-        }
-        
-        items[index] = item;
-        ActualizarUI();
-        
-        if (OnInventarioActualizado != null)
-            OnInventarioActualizado.Invoke();
-    }
-
-    // === MÉTODO PRINCIPAL: Recoger item ===
     public void RecogerItem(ItemData item)
     {
-        if (item == null) return;
+        if (item == null || esperandoSlot) return;
         
-        // Buscar slot vacío automáticamente (si hay)
-        int slotVacio = -1;
-        for (int i = 0; i < items.Count; i++)
-        {
-            if (items[i] == null)
-            {
-                slotVacio = i;
-                break;
-            }
-        }
+        int vacio = items.FindIndex(i => i == null);
         
-        if (slotVacio != -1 && !esperandoSeleccionSlot)
+        if (vacio != -1)
         {
-            // Guardar directamente en slot vacío
-            items[slotVacio] = item;
+            items[vacio] = item;
             ActualizarUI();
-            Debug.Log($"✅ Item '{item.nombre}' guardado automáticamente en slot {slotVacio + 1}");
-            
-            if (OnInventarioActualizado != null)
-                OnInventarioActualizado.Invoke();
+            OnInventarioActualizado?.Invoke();
+            Debug.Log("item guardado en slot " + (vacio + 1));
         }
         else
         {
-            // No hay slots vacíos o ya hay un item pendiente
-            if (esperandoSeleccionSlot)
-            {
-                Debug.Log("⚠️ Ya hay un item pendiente de guardar");
-                return;
-            }
-            
-            // Abrir inventario para seleccionar slot
             itemPendiente = item;
-            esperandoSeleccionSlot = true;
+            esperandoSlot = true;
             AbrirInventario();
-            Debug.Log($"📦 Item '{item.nombre}' recogido. Selecciona un slot para guardarlo.");
-            
-            // Mostrar mensaje en pantalla (opcional)
+            Debug.Log("selecciona un slot para " + item.nombre);
             if (emptyText != null)
             {
-                emptyText.GetComponent<Text>().text = $"📦 {item.nombre} - Selecciona un slot";
-                emptyText.GetComponent<Text>().color = new Color(1f, 0.8f, 0.2f);
+                var txt = emptyText.GetComponent<Text>();
+                txt.text = "selecciona un slot";
+                txt.color = Color.yellow;
                 emptyText.SetActive(true);
             }
         }
@@ -175,156 +97,81 @@ public class InventarioController : MonoBehaviour
     void CancelarRecoleccion()
     {
         itemPendiente = null;
-        esperandoSeleccionSlot = false;
-        
+        esperandoSlot = false;
+        CerrarInventario();
         if (emptyText != null)
         {
-            emptyText.GetComponent<Text>().text = "📭 Inventario vacío";
-            emptyText.GetComponent<Text>().color = new Color(0.6f, 0.55f, 0.5f);
-            ActualizarUI();
+            var txt = emptyText.GetComponent<Text>();
+            txt.text = "inventario vacio";
+            txt.color = Color.gray;
         }
-        
-        CerrarInventario();
-        Debug.Log("❌ Recolección cancelada");
+        ActualizarUI();
     }
 
     public void ToggleInventario()
     {
-        if (inventarioAbierto)
+        if (abierto)
         {
-            if (esperandoSeleccionSlot)
-            {
-                CancelarRecoleccion();
-            }
-            else
-            {
-                CerrarInventario();
-            }
+            if (esperandoSlot) CancelarRecoleccion();
+            else CerrarInventario();
         }
-        else
-        {
-            AbrirInventario();
-        }
+        else AbrirInventario();
     }
 
     void AbrirInventario()
     {
-        inventarioAbierto = true;
-        if (inventarioPanel != null)
-        {
-            inventarioPanel.SetActive(true);
-        }
-        
-        if (gameManager != null)
-        {
-            gameManager.PausarJuego();
-        }
-        
+        abierto = true;
+        inventarioPanel?.SetActive(true);
+        gameManager?.PausarJuego();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        
         ActualizarUI();
-        Debug.Log("📂 Inventario abierto");
     }
 
     void CerrarInventario()
     {
-        inventarioAbierto = false;
-        if (inventarioPanel != null)
-        {
-            inventarioPanel.SetActive(false);
-        }
-        
-        if (gameManager != null && !esperandoSeleccionSlot)
-        {
+        abierto = false;
+        inventarioPanel?.SetActive(false);
+        if (gameManager != null && !esperandoSlot)
             gameManager.ReanudarJuego();
-        }
-        
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
-        Debug.Log("📂 Inventario cerrado");
     }
-
-    // === MÉTODOS PÚBLICOS ===
 
     public bool AgregarItem(ItemData item)
     {
-        // Buscar slot vacío
-        for (int i = 0; i < items.Count; i++)
-        {
-            if (items[i] == null)
-            {
-                items[i] = item;
-                ActualizarUI();
-                
-                if (OnInventarioActualizado != null)
-                    OnInventarioActualizado.Invoke();
-                    
-                Debug.Log($"✅ Item '{item.nombre}' agregado al inventario (slot {i + 1})");
-                return true;
-            }
-        }
+        int vacio = items.FindIndex(i => i == null);
+        if (vacio == -1) return false;
         
-        Debug.Log("⚠️ Inventario lleno! Usa 'E' para reemplazar un item.");
-        return false;
+        items[vacio] = item;
+        ActualizarUI();
+        OnInventarioActualizado?.Invoke();
+        return true;
     }
 
     public void RemoverItem(int index)
     {
         if (index >= 0 && index < items.Count && items[index] != null)
         {
-            Debug.Log($"🗑️ Item '{items[index].nombre}' removido del inventario");
             items[index] = null;
             ActualizarUI();
-            
-            if (OnInventarioActualizado != null)
-                OnInventarioActualizado.Invoke();
+            OnInventarioActualizado?.Invoke();
         }
     }
 
-    public bool TieneItem(string nombreItem)
+    public bool TieneItem(string nombre)
     {
-        foreach (ItemData item in items)
-        {
-            if (item != null && item.nombre == nombreItem)
-            {
-                return true;
-            }
-        }
-        return false;
+        return items.Exists(i => i != null && i.nombre == nombre);
     }
 
-    public ItemData ObtenerItem(string nombreItem)
+    public ItemData ObtenerItem(string nombre)
     {
-        foreach (ItemData item in items)
-        {
-            if (item != null && item.nombre == nombreItem)
-            {
-                return item;
-            }
-        }
-        return null;
+        return items.Find(i => i != null && i.nombre == nombre);
     }
 
-    public bool EstaLleno()
-    {
-        foreach (ItemData item in items)
-        {
-            if (item == null) return false;
-        }
-        return true;
-    }
-
-    public bool EstaAbierto()
-    {
-        return inventarioAbierto;
-    }
-
-    public List<ItemData> GetItems()
-    {
-        return items;
-    }
+    public bool EstaLleno() => items.TrueForAll(i => i != null);
+    public bool EstaAbierto() => abierto;
+    public List<ItemData> GetItems() => items;
 
     void ActualizarUI()
     {
@@ -332,85 +179,69 @@ public class InventarioController : MonoBehaviour
         
         for (int i = 0; i < slots.Count; i++)
         {
-            GameObject slot = slots[i];
-            if (slot == null) continue;
+            if (slots[i] == null) continue;
             
-            Transform iconTransform = slot.transform.Find("Icono");
-            GameObject iconGO = iconTransform != null ? iconTransform.gameObject : null;
-            
-            Transform cantTransform = slot.transform.Find("Cantidad");
-            GameObject cantGO = cantTransform != null ? cantTransform.gameObject : null;
+            var icono = slots[i].transform.Find("Icono")?.gameObject;
+            var cantidad = slots[i].transform.Find("Cantidad")?.gameObject;
             
             if (i < items.Count && items[i] != null)
             {
-                ItemData item = items[i];
-                
-                if (iconGO != null)
-                {
-                    iconGO.SetActive(true);
-                    Image iconImg = iconGO.GetComponent<Image>();
-                    if (iconImg != null && item.icono != null)
-                    {
-                        iconImg.sprite = item.icono;
-                        iconImg.color = Color.white;
-                    }
-                }
-                
-                if (cantGO != null && item.cantidad > 1)
-                {
-                    cantGO.SetActive(true);
-                    Text cantText = cantGO.GetComponent<Text>();
-                    if (cantText != null)
-                    {
-                        cantText.text = item.cantidad.ToString();
-                    }
-                }
-                else if (cantGO != null)
-                {
-                    cantGO.SetActive(false);
-                }
-                
+                var item = items[i];
                 tieneItems = true;
+                
+                if (icono != null)
+                {
+                    icono.SetActive(true);
+                    var img = icono.GetComponent<Image>();
+                    if (img != null && item.icono != null)
+                    {
+                        img.sprite = item.icono;
+                        img.color = Color.white;
+                    }
+                }
+                
+                if (cantidad != null)
+                {
+                    var txt = cantidad.GetComponent<Text>();
+                    if (item.cantidad > 1 && txt != null)
+                    {
+                        cantidad.SetActive(true);
+                        txt.text = item.cantidad.ToString();
+                    }
+                    else cantidad.SetActive(false);
+                }
             }
             else
             {
-                if (iconGO != null)
+                if (icono != null)
                 {
-                    iconGO.SetActive(false);
-                    Image iconImg = iconGO.GetComponent<Image>();
-                    if (iconImg != null)
-                    {
-                        iconImg.color = new Color(1, 1, 1, 0);
-                    }
+                    icono.SetActive(false);
+                    var img = icono.GetComponent<Image>();
+                    if (img != null) img.color = new Color(1, 1, 1, 0);
                 }
-                
-                if (cantGO != null)
-                {
-                    cantGO.SetActive(false);
-                }
+                if (cantidad != null) cantidad.SetActive(false);
             }
         }
         
-        // Mostrar texto de estado
         if (emptyText != null)
         {
-            Text text = emptyText.GetComponent<Text>();
-            if (!esperandoSeleccionSlot)
+            var txt = emptyText.GetComponent<Text>();
+            if (!esperandoSlot)
             {
                 emptyText.SetActive(!tieneItems);
-                if (text != null)
+                if (txt != null)
                 {
-                    text.text = "📭 Inventario vacío";
-                    text.color = new Color(0.6f, 0.55f, 0.5f);
+                    txt.text = "inventario vacio";
+                    txt.color = Color.gray;
                 }
             }
             else
             {
                 emptyText.SetActive(true);
-                if (text != null && itemPendiente != null)
+                if (txt != null && itemPendiente != null)
                 {
-                    text.text = $"📦 {itemPendiente.nombre} - Selecciona un slot";
-                    text.color = new Color(1f, 0.8f, 0.2f);
+                    txt.text = "selecciona un slot";
+                    txt.color = Color.yellow;
                 }
             }
         }

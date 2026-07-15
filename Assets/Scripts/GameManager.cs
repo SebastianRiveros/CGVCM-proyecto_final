@@ -4,13 +4,11 @@ using UnityEngine.SceneManagement;
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
-
-    [Header("Escenas")]
-    public string nombreEscenaJuego = "Juego";
-    public string nombreEscenaMenu = "MenuPrincipal";
-
-    private bool isPaused = false;
-    private bool gameStarted = false;
+    public string escenaJuego = "Juego";
+    public string escenaMenu = "MenuPrincipal";
+    
+    private bool pausado;
+    private bool enJuego;
 
     void Awake()
     {
@@ -19,45 +17,37 @@ public class GameManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
         }
-        else
-        {
-            Destroy(gameObject);
-        }
+        else Destroy(gameObject);
     }
 
-    void Start()
-    {
-        PausarJuego();
-    }
+    void Start() => PausarJuego();
 
+    // metodos con nombres originales para compatibilidad
     public void IniciarJuego()
     {
-        gameStarted = true;
+        enJuego = true;
         ReanudarJuego();
-        SceneManager.LoadScene(nombreEscenaJuego);
+        SceneManager.LoadScene(escenaJuego);
     }
 
     public void CargarPartida()
     {
-        gameStarted = true;
+        enJuego = true;
         ReanudarJuego();
-        SceneManager.LoadScene(nombreEscenaJuego);
+        SceneManager.LoadScene(escenaJuego);
     }
 
     public void PausarJuego()
     {
-        isPaused = true;
+        pausado = true;
         Time.timeScale = 0f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        
-        // 🔥 IMPORTANTE: El EventSystem NO se pausa, la UI sigue funcionando
-        // porque usamos Time.unscaledDeltaTime en los scripts si es necesario
     }
 
     public void ReanudarJuego()
     {
-        isPaused = false;
+        pausado = false;
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -65,19 +55,12 @@ public class GameManager : MonoBehaviour
 
     public void TogglePausa()
     {
-        if (gameStarted)
-        {
-            if (isPaused)
-                ReanudarJuego();
-            else
-                PausarJuego();
-        }
+        if (!enJuego) return;
+        if (pausado) ReanudarJuego();
+        else PausarJuego();
     }
 
-    public bool EstaPausado()
-    {
-        return isPaused;
-    }
+    public bool EstaPausado() => pausado;
 
     public void SalirJuego()
     {
@@ -90,8 +73,8 @@ public class GameManager : MonoBehaviour
 
     public void VolverAlMenu()
     {
-        gameStarted = false;
+        enJuego = false;
         ReanudarJuego();
-        SceneManager.LoadScene(nombreEscenaMenu);
+        SceneManager.LoadScene(escenaMenu);
     }
 }
